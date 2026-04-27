@@ -3,40 +3,34 @@ import pandas as pd
 import plotly.express as px
 
 # 1. Terminal Styling & Page Config
-st.set_page_config(page_title="Alpha Terminal V3.1", layout="wide")
+st.set_page_config(page_title="SlabMetrics Alpha V5", layout="wide")
 
-# Custom CSS for a professional "Fintech" Look
+# Custom CSS for a professional "Fintech Terminal" look
 st.markdown("""
     <style>
     .main { background-color: #f8f9fa; }
     [data-testid="stMetric"] { 
-        background-color: white; padding: 20px; border-radius: 12px; 
+        background-color: white; padding: 15px; border-radius: 10px; 
         border-left: 5px solid #007bff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
     }
-    .stProgress > div > div > div > div { background-color: #007bff; }
+    [data-testid="stExpander"] { background-color: white; border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Secure Data Sync
-# REPLACE the link below with your actual 'Publish to Web' CSV link
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0CVHmiq-BZWdi55hhxYmou_ypaWownqkkBRjYJhl1a4BH6yVed-BfwIPFGHM0ORPQpJlY0lvpWa5O/pub?gid=0&single=true&output=csv"
+# 2. Data Sync
+# REPLACE with your 'Publish to Web' CSV link
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0CVHmiq-BZWdi55hhxYmou_ypaWownqkkBRjYJhl1a4BH6yVed-BfwIPFGHM0ORPQpJlY0lvpWa5O/pub?gid=1605600764&single=true&output=csv"
 
 @st.cache_data(ttl=300)
 def load_terminal_data():
     try:
-        # skipinitialspace handles accidental spaces in Google Sheet headers
+        # Load data and handle the asterisk/text issues silently
         df = pd.read_csv(SHEET_URL, skipinitialspace=True)
-        
-        # FIX: Handle potential truncation from Google Sheets 'Divergence_Sco'
-        if 'Divergence_Sco' in df.columns and 'Divergence_Score' not in df.columns:
-            df = df.rename(columns={'Divergence_Sco': 'Divergence_Score'})
-            
-        # Ensure all core columns are numeric to prevent 0.00 display errors
-        numeric_cols = ['OPS', 'Price', 'Divergence_Score', 'CL_Value', 'CL_Premium', 'Alpha_Rank']
-        for col in numeric_cols:
+        # Clean numeric columns to ensure math doesn't break
+        cols_to_fix = ['bWAR', 'SPI', 'Secondary_1', 'Secondary_2', 'CL_Value', 'Alpha_Rank']
+        for col in cols_to_fix:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-        
         return df
     except Exception as e:
         st.error(f"Sync Error: {e}")
@@ -44,91 +38,61 @@ def load_terminal_data():
 
 df = load_terminal_data()
 
-# 3. Decision Logic & Header
-st.title("🛡️ Star Divergence V3: The Alpha Terminal")
-st.caption(f"Proprietary Market Intelligence | Last Sync: April 26, 2026")
+# 3. Decision Logic & Sidebar Controls
+st.title("🛡️ SlabMetrics Alpha V5: The Blue-Chip Terminal")
+st.caption("Institutional Sabermetric Arbitrage | Career Equity vs. Market Value")
 
 if df is not None:
-    # Verify that the critical Alpha_Rank column exists
-    if 'Alpha_Rank' in df.columns:
+    # Sidebar: Market Sentiment (The eBay Gap)
+    st.sidebar.header("🕹️ Market Controls")
+    ebay_discount = st.sidebar.slider("eBay 'Live' Discount (%)", 0, 25, 0)
+    
+    # Recalculate based on live user input
+    df['Adj_Value'] = df['CL_Value'] * (1 - (ebay_discount / 100))
+    # Alpha = (SPI / Price) * 100 -- ensures numbers are readable
+    df['Adj_Alpha'] = (df['SPI'] * 100) / df['Adj_Value'].replace(0, 1)
+
+    # --- TOP LEVEL KPIs ---
+    m1, m2, m3, m4 = st.columns(4)
+    top_card = df.sort_values(by='Adj_Alpha', ascending=False).iloc[0]
+    m1.metric("Highest Alpha Opportunity", top_card['Player'], f"{top_card['Adj_Alpha']:.2f}")
+    m2.metric("Market Coverage", f"{len(df['Player'].unique())} Stars", "50 Cards Total")
+    m3.metric("Avg Market Premium", f"{df['Adj_Alpha'].mean():.2f}")
+    m4.metric("Terminal Status", "Live", "Verified 2026")
+
+    # --- THE ALPHA MATRIX (Bubble Chart) ---
+    st.divider()
+    st.subheader("📍 The Alpha Matrix: Performance vs. Valuation")
+    st.info("💡 Top-Left Quadrant: High Career Equity (SPI) at Low Market Cost (Value).")
+    
+    fig = px.scatter(df, x="Adj_Value", y="SPI", 
+                     size="Adj_Alpha", color="Adj_Alpha",
+                     hover_name="Card_Name", text="Player",
+                     color_continuous_scale="RdYlGn",
+                     labels={"Adj_Value": "Effective Market Price ($)", "SPI": "SlabMetric Performance Index"})
+    
+    fig.update_traces(textposition='top center')
+    st.plotly_chart(fig, use_container_width=True)
+
+    # --- THE ALPHA 50 PORTFOLIO (Grouped by Player) ---
+    st.divider()
+    st.header("🏆 The Alpha 50 Portfolio")
+    
+    # Grouping logic to prevent a "wall of text"
+    players = df['Player'].unique()
+    for player in players:
+        p_cards = df[df['Player'] == player].sort_values(by='Adj_Alpha', ascending=False)
+        avg_p_alpha = p_cards['Adj_Alpha'].mean()
         
-        # --- TOP LEVEL KPIs ---
-        # Sorting to find the top buy signal
-        top_asset = df.sort_values(by='Alpha_Rank', ascending=False).iloc[0]
-        
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Highest Alpha Signal", top_asset['Name'], f"{top_asset['Alpha_Rank']:.2f}")
-        m2.metric("Market Premium Avg", f"{df['CL_Premium'].mean():.2f}x")
-        m3.metric("Peak Divergence", f"{df['Divergence_Score'].max():.2f}")
-        m4.metric("Asset Coverage", len(df), "Active Stars")
-
-        # --- OPPORTUNITY MATRIX (Bubble Chart) ---
-        st.divider()
-        col_chart, col_leader = st.columns([2, 1])
-        
-        with col_chart:
-            st.subheader("📍 The Alpha Matrix")
-            st.info("💡 Top-Left Quadrant: High Performance (Divergence) vs Low Market Hype (Premium).")
-            
-            fig = px.scatter(df, x="CL_Premium", y="Divergence_Score",
-                             size="Alpha_Rank", color="Alpha_Rank",
-                             hover_name="Name", text="Name",
-                             color_continuous_scale="RdYlGn",
-                             labels={
-                                 "CL_Premium": "Hype Factor (Market Price / Card Ladder)", 
-                                 "Divergence_Score": "Performance Gap (OPS vs Price)"
-                             })
-            
-            fig.update_traces(textposition='top center')
-            fig.add_hline(y=df['Divergence_Score'].mean(), line_dash="dot", annotation_text="Avg Performance")
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col_leader:
-            st.subheader("🏆 Market Leaderboard")
-            # Pulling the status and rank from your sheet
-            leaderboard_cols = ['Name', 'Alpha_Rank']
-            if 'Status' in df.columns:
-                leaderboard_cols.append('Status')
-                
-            st.dataframe(df[leaderboard_cols].sort_values(by='Alpha_Rank', ascending=False), 
-                         hide_index=True, use_container_width=True)
-
-        # --- HEAD-TO-HEAD BATTLE ---
-        st.divider()
-        st.subheader("⚔️ Star Battle: Head-to-Head Comparison")
-        star_options = df['Name'].tolist()
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            p1 = st.selectbox("Select Player A", star_options, index=0)
-            p1_data = df[df['Name'] == p1].iloc[0]
-            st.metric(f"{p1} Alpha Score", f"{p1_data['Alpha_Rank']:.2f}")
-            # Visual progress bar (capped at 2.0 for scale)
-            st.progress(min(float(p1_data['Alpha_Rank']) / 2.0, 1.0))
-            
-        with c2:
-            # Default to index 1 if it exists, otherwise 0
-            default_p2 = 1 if len(star_options) > 1 else 0
-            p2 = st.selectbox("Select Player B", star_options, index=default_p2)
-            p2_data = df[df['Name'] == p2].iloc[0]
-            st.metric(f"{p2} Alpha Score", f"{p2_data['Alpha_Rank']:.2f}")
-            st.progress(min(float(p2_data['Alpha_Rank']) / 2.0, 1.0))
-
-        # --- FULL TECHNICAL DATA ---
-        with st.expander("📊 View Raw Market Data"):
-            st.dataframe(df, use_container_width=True, hide_index=True)
-
-        # --- SIDEBAR INSIGHTS ---
-        st.sidebar.header("Terminal Insights")
-        st.sidebar.success(f"**Top Value Asset:** {top_asset['Name']}")
-        st.sidebar.write(f"Currently trading at a {top_asset['CL_Premium']:.2f}x premium relative to Card Ladder, while maintaining a Divergence of {top_asset['Divergence_Score']:.2f}.")
-        st.sidebar.divider()
-        st.sidebar.info("Methodology: Alpha Rank = Divergence / Card Ladder Premium. Identifying where production outpaces hype.")
-
-    else:
-        st.error("⚠️ Column Name Mismatch")
-        st.write("Ensure your Google Sheet headers are: Name, OPS, Price, Divergence_Score, CL_Value, CL_Premium, Alpha_Rank")
-        st.info("Current Columns Found: " + ", ".join(df.columns))
+        with st.expander(f"👤 {player} | Portfolio Alpha: {avg_p_alpha:.2f}"):
+            cols = st.columns(5)
+            for i, (_, card) in enumerate(p_cards.iterrows()):
+                with cols[i]:
+                    st.metric(card['Card_Name'], f"${card['Adj_Value']:,.0f}", f"{card['Adj_Alpha']:.2f} Alpha")
+                    # PRE-FILLED EBAY SOLD SEARCH
+                    search_query = f"{card['Player']} {card['Card_Name']} PSA 10 Sold".replace(" ", "+")
+                    ebay_link = f"https://www.ebay.com/sch/i.html?_nkw={search_query}&LH_Sold=1&LH_Complete=1"
+                    st.link_button("🔥 Check eBay", ebay_link)
 
 else:
-    st.warning("🔄 Waiting for Data Engine... verify your 'Publish to Web' link in Google Sheets.")
+    st.warning("🔄 Reconnecting to SlabMetrics Engine... Ensure your CSV link is correct.")
