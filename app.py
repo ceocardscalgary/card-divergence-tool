@@ -2,82 +2,89 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. Page Configuration & Fintech Styling
-st.set_page_config(page_title="Star Divergence V3", layout="wide")
+# 1. Terminal Styling
+st.set_page_config(page_title="Alpha Terminal V3", layout="wide")
 st.markdown("""
     <style>
-    .main { background-color: #f0f2f6; }
-    div[data-testid="metric-container"] {
-        background-color: #ffffff; border: 1px solid #e0e0e0;
-        padding: 15px; border-radius: 10px;
-    }
+    .main { background-color: #f4f6f9; }
+    [data-testid="stMetric"] { background-color: white; padding: 20px; border-radius: 12px; border-left: 5px solid #007bff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Secure Data Sync
-# ENSURE THIS LINK HAS gid=0 (or the GID of your Dashboard tab)
+# 2. Data Sync
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0CVHmiq-BZWdi55hhxYmou_ypaWownqkkBRjYJhl1a4BH6yVed-BfwIPFGHM0ORPQpJlY0lvpWa5O/pub?gid=0&single=true&output=csv"
 
 @st.cache_data(ttl=300)
-def load_v3_data():
+def load_terminal_data():
     try:
         df = pd.read_csv(SHEET_URL)
-        numeric_cols = ['OPS', 'Price', 'Divergence_Score', 'CL_Value', 'CL_Premium', 'Alpha_Rank']
-        for col in numeric_cols:
+        # Ensure numeric columns are clean
+        for col in ['OPS', 'Price', 'Divergence_Score', 'CL_Value', 'CL_Premium', 'Alpha_Rank']:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
-    except:
+    except Exception as e:
+        st.error(f"Sync Error: {e}")
         return None
 
-df = load_v3_data()
+df = load_terminal_data()
 
-# 3. V3 Dashboard Interface
+# 3. Decision Logic & KPIs
 st.title("🛡️ Star Divergence V3: The Alpha Terminal")
-st.caption("Advanced Sabermetric Arbitrage | Card Ladder Benchmark Integrated")
+st.caption(f"Proprietary Market Intelligence | Last Updated: April 26, 2026")
 
-if df is not None:
-    # Top Level KPI Row
-    top_alpha = df.sort_values(by='Alpha_Rank', ascending=False).iloc[0]
+if df is not None and 'Alpha_Rank' in df.columns:
+    # Key Stats Row
+    top_asset = df.sort_values(by='Alpha_Rank', ascending=False).iloc[0]
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Top Alpha Buy", top_alpha['Name'], f"Rank: {top_alpha['Alpha_Rank']:.2f}")
-    m2.metric("Market Premium Avg", f"{df['CL_Premium'].mean():.2f}x")
-    m3.metric("Max Divergence", f"{df['Divergence_Score'].max():.2f}")
-    m4.metric("Asset Coverage", len(df), "Active Stars")
+    m1.metric("Highest Alpha Signal", top_asset['Name'], f"{top_asset['Alpha_Rank']:.2f} Score")
+    m2.metric("Market Premium Avg", f"{df['CL_Premium'].mean():.2x}x")
+    m3.metric("Current Asset Load", len(df), "Active Stars")
+    m4.metric("Divergence Peak", f"{df['Divergence_Score'].max():.2f}")
 
-    # 4. The Decision Matrix (Bubble Chart)
+    # 4. Asset Opportunity Matrix
     st.divider()
-    st.subheader("📍 Asset Opportunity Matrix")
-    st.info("Top-Left Quadrant = High Performance, Low Market Premium (The Alpha Zone)")
+    col_chart, col_leader = st.columns([2, 1])
     
-    fig = px.scatter(df, x="CL_Premium", y="Divergence_Score",
-                     size="Alpha_Rank", color="Name",
-                     hover_data=['Price', 'OPS'],
-                     labels={"CL_Premium": "Market Premium (Price / Card Ladder)", 
-                             "Divergence_Score": "Performance Divergence (OPS vs Price)"})
-    st.plotly_chart(fig, use_container_width=True)
+    with col_chart:
+        st.subheader("📍 Opportunity Matrix")
+        # Bubble chart: X=Market Premium, Y=Divergence, Size=Alpha Rank
+        fig = px.scatter(df, x="CL_Premium", y="Divergence_Score",
+                         size="Alpha_Rank", color="Alpha_Rank",
+                         hover_name="Name", text="Name",
+                         color_continuous_scale="RdYlGn",
+                         labels={"CL_Premium": "Card Ladder Premium (Market Price / CL)", "Divergence_Score": "Perf Divergence"})
+        fig.update_traces(textposition='top center')
+        st.plotly_chart(fig, use_container_width=True)
 
-    # 5. Star Comparison Battle
+    with col_leader:
+        st.subheader("🏆 Alpha Leaderboard")
+        st.dataframe(df[['Name', 'Alpha_Rank', 'Status']].sort_values(by='Alpha_Rank', ascending=False), 
+                     hide_index=True, use_container_width=True)
+
+    # 5. Head-to-Head Comparison
     st.divider()
-    st.subheader("⚔️ Star Battle: Head-to-Head Comparison")
-    star_options = df['Name'].tolist()
-    col_a, col_b = st.columns(2)
+    st.subheader("⚔️ Star Battle: Comparative Value Analysis")
+    p_options = df['Name'].tolist()
+    c1, c2 = st.columns(2)
     
-    with col_a:
-        p1 = st.selectbox("Select Player 1", star_options, index=0)
-        p1_data = df[df['Name'] == p1].iloc[0]
-        st.write(f"**{p1} Alpha Rank:** {p1_data['Alpha_Rank']:.2f}")
-        st.progress(min(p1_data['Alpha_Rank']/2, 1.0)) # Visual scale
+    with c1:
+        p1 = st.selectbox("Compare Player A", p_options, index=0)
+        p1_stats = df[df['Name'] == p1].iloc[0]
+        st.metric(f"{p1} Alpha", f"{p1_stats['Alpha_Rank']:.2f}")
+        st.progress(min(p1_stats['Alpha_Rank'] / 2, 1.0))
         
-    with col_b:
-        p2 = st.selectbox("Select Player 2", star_options, index=1)
-        p2_data = df[df['Name'] == p2].iloc[0]
-        st.write(f"**{p2} Alpha Rank:** {p2_data['Alpha_Rank']:.2f}")
-        st.progress(min(p2_data['Alpha_Rank']/2, 1.0))
-
-    # 6. Technical Data Table
-    with st.expander("📊 View Detailed Market Logs"):
-        st.dataframe(df, use_container_width=True, hide_index=True)
+    with c2:
+        p2 = st.selectbox("Compare Player B", p_options, index=1)
+        p2_stats = df[df['Name'] == p2].iloc[0]
+        st.metric(f"{p2} Alpha", f"{p2_stats['Alpha_Rank']:.2f}")
+        st.progress(min(p2_stats['Alpha_Rank'] / 2, 1.0))
 
 else:
-    st.warning("⚠️ Connection Error. Ensure your Google Sheet is published and the URL is correct.")
+    st.warning("⚠️ Critical Alert: 'Alpha_Rank' column not found in Google Sheet. Please add Column H to your sheet and refresh.")
+
+# 6. Sidebar Market Notes
+st.sidebar.header("Terminal Insights")
+if df is not None:
+    st.sidebar.success(f"**Top Buy:** {top_asset['Name']} is currently the most efficient performance asset relative to Card Ladder benchmarks.")
+st.sidebar.info("Methodology: Alpha Rank = Divergence Score / Card Ladder Premium. It identifies players whose performance gap is wider than their market hype.")
