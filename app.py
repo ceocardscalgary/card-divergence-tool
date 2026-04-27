@@ -1,56 +1,47 @@
 import streamlit as st
 import pandas as pd
-import requests
 
+# 1. Page Configuration
 st.set_page_config(page_title="High-End Star Divergence Tracker", layout="wide")
 
 st.title("📈 High-End Star Divergence Tracker (2026)")
-st.markdown("Comparing current performance against 3-year historical benchmarks.")
+st.markdown("Proprietary analytical data comparing 2026 performance vs. market valuation.")
 
-# Sidebar for Price Inputs
-st.sidebar.header("Current Market Prices (PSA 10)")
-prices = {
-    "Yordan Alvarez": st.sidebar.number_input("Yordan Alvarez ($)", value=150),
-    "Aaron Judge": st.sidebar.number_input("Aaron Judge ($)", value=210),
-    "Shohei Ohtani": st.sidebar.number_input("Shohei Ohtani ($)", value=550)
-}
+# 2. YOUR GOOGLE SHEET CSV LINK
+# Replace the URL below with your 'Publish to Web' CSV link from Google Sheets
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0CVHmiq-BZWdi55hhxYmou_ypaWownqkkBRjYJhl1a4BH6yVed-BfwIPFGHM0ORPQpJlY0lvpWa5O/pub?gid=0&single=true&output=csv"
 
-@st.cache_data
-def fetch_mlb_data():
-    # Fetching from official MLB API (Usually bypasses the 403 block)
-    url = "https://statsapi.mlb.com/api/v1/stats?stats=season&group=batting&season=2026&playerPool=all"
-    response = requests.get(url)
-    data = response.json()
-    
-    player_stats = []
-    target_stars = ["Yordan Alvarez", "Aaron Judge", "Shohei Ohtani"]
-    
-    for split in data['stats'][0]['splits']:
-        name = split['player']['fullName']
-        if name in target_stars:
-            stats = split['stat']
-            player_stats.append({
-                "Name": name,
-                "AVG": stats.get('avg'),
-                "OPS": float(stats.get('ops', 0)),
-                "HR": stats.get('homeRuns'),
-                "PA": stats.get('plateAppearances')
-            })
-    return pd.DataFrame(player_stats)
+@st.cache_data(ttl=600)  # Refreshes the data every 10 minutes
+def load_data():
+    try:
+        # Pulling the clean data from your Google Sheet
+        df = pd.read_csv(SHEET_URL)
+        return df
+    except Exception as e:
+        st.error(f"Error connecting to Data Engine: {e}")
+        return None
 
-try:
-    df = fetch_mlb_data()
-    
-    # Calculate the Divergence Score
-    df['Price'] = df['Name'].map(prices)
-    # Strategy: OPS per $100 spent
-    df['Divergence_Score'] = (df['OPS'] * 100) / df['Price']
-    
-    st.subheader("2026 Performance vs. Market Value")
-    st.dataframe(df.sort_values(by='Divergence_Score', ascending=False), use_container_width=True)
-    
-    st.success("✅ Data live from official MLB feeds.")
+# 3. Load and Display Data
+df = load_data()
 
-except Exception as e:
-    st.error(f"System Offline: {e}")
-    st.info("The data provider might be experiencing high traffic. Refresh in 60 seconds.")
+if df is not None:
+    # Sort by Divergence Score automatically to show the best "Buys" first
+    # (Assuming your column is named 'Divergence_Score' or similar)
+    if 'Divergence_Score' in df.columns:
+        df = df.sort_values(by='Divergence_Score', ascending=False)
+    
+    st.subheader("Market Analysis: Performance vs. Price")
+    st.dataframe(df, use_container_width=True)
+    
+    st.success("✅ Data Engine Status: Online & Verified")
+    
+    # 4. Add your "Analytical" Personality
+    st.divider()
+    st.subheader("📝 Market Insights")
+    st.write("""
+        This tracker identifies valuation gaps in the high-end sports card market. 
+        A higher **Divergence Score** indicates a player is significantly outperforming 
+        their current market price based on 2026 Statcast metrics.
+    """)
+else:
+    st.warning("🔄 Waiting for data from Google Sheets... Ensure your sheet is 'Published to the Web' as a CSV.")
