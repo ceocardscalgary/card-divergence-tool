@@ -2,88 +2,82 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. Professional Page Setup
-st.set_page_config(page_title="Star Divergence V2", layout="wide", initial_sidebar_state="expanded")
-
-# Custom CSS for a "Terminal" Look
+# 1. Page Configuration & Fintech Styling
+st.set_page_config(page_title="Star Divergence V3", layout="wide")
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0; }
+    .main { background-color: #f0f2f6; }
+    div[data-testid="metric-container"] {
+        background-color: #ffffff; border: 1px solid #e0e0e0;
+        padding: 15px; border-radius: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Secure Data Connection
-# Replace with your 'Publish to Web' CSV link
+# 2. Secure Data Sync
+# ENSURE THIS LINK HAS gid=0 (or the GID of your Dashboard tab)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ0CVHmiq-BZWdi55hhxYmou_ypaWownqkkBRjYJhl1a4BH6yVed-BfwIPFGHM0ORPQpJlY0lvpWa5O/pub?gid=0&single=true&output=csv"
 
-@st.cache_data(ttl=600)
-def load_v2_data():
+@st.cache_data(ttl=300)
+def load_v3_data():
     try:
         df = pd.read_csv(SHEET_URL)
-        # Force numeric types to prevent chart errors
-        df['OPS'] = pd.to_numeric(df['OPS'], errors='coerce').fillna(0)
-        df['Price'] = pd.to_numeric(df['Price'], errors='coerce').fillna(1) # Avoid div by zero
-        df['Divergence_Score'] = pd.to_numeric(df['Divergence_Score'], errors='coerce').fillna(0)
+        numeric_cols = ['OPS', 'Price', 'Divergence_Score', 'CL_Value', 'CL_Premium', 'Alpha_Rank']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         return df
-    except Exception as e:
-        st.error(f"Engine Error: {e}")
+    except:
         return None
 
-df = load_v2_data()
+df = load_v3_data()
 
-# 3. Header & KPI Section
-st.title("🛡️ Star Divergence V2: Market Intelligence")
-st.caption("Sabermetric Arbitrage Engine | Verified 2026 Data")
+# 3. V3 Dashboard Interface
+st.title("🛡️ Star Divergence V3: The Alpha Terminal")
+st.caption("Advanced Sabermetric Arbitrage | Card Ladder Benchmark Integrated")
 
 if df is not None:
-    # High-Level Metrics
-    top_buy = df.sort_values(by='Divergence_Score', ascending=False).iloc[0]
-    avg_ops = df['OPS'].mean()
-    
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Top Alpha Opportunity", top_buy['Name'], f"Score: {top_buy['Divergence_Score']:.2f}")
-    m2.metric("Market Benchmark (OPS)", f"{avg_ops:.3f}")
-    m3.metric("Engine Status", "Online", "v2.0.4 Stable")
+    # Top Level KPI Row
+    top_alpha = df.sort_values(by='Alpha_Rank', ascending=False).iloc[0]
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Top Alpha Buy", top_alpha['Name'], f"Rank: {top_alpha['Alpha_Rank']:.2f}")
+    m2.metric("Market Premium Avg", f"{df['CL_Premium'].mean():.2f}x")
+    m3.metric("Max Divergence", f"{df['Divergence_Score'].max():.2f}")
+    m4.metric("Asset Coverage", len(df), "Active Stars")
 
+    # 4. The Decision Matrix (Bubble Chart)
     st.divider()
+    st.subheader("📍 Asset Opportunity Matrix")
+    st.info("Top-Left Quadrant = High Performance, Low Market Premium (The Alpha Zone)")
+    
+    fig = px.scatter(df, x="CL_Premium", y="Divergence_Score",
+                     size="Alpha_Rank", color="Name",
+                     hover_data=['Price', 'OPS'],
+                     labels={"CL_Premium": "Market Premium (Price / Card Ladder)", 
+                             "Divergence_Score": "Performance Divergence (OPS vs Price)"})
+    st.plotly_chart(fig, use_container_width=True)
 
-    # 4. Visual Analysis Section
-    col_left, col_right = st.columns([2, 1])
-
-    with col_left:
-        st.subheader("Performance vs. Valuation Matrix")
-        # Creating the scatter plot
-        fig = px.scatter(df, x="Price", y="OPS", text="Name", 
-                         size="Divergence_Score", color="Divergence_Score",
-                         color_continuous_scale="Viridis",
-                         labels={"Price": "Market Price ($)", "OPS": "Season OPS"})
+    # 5. Star Comparison Battle
+    st.divider()
+    st.subheader("⚔️ Star Battle: Head-to-Head Comparison")
+    star_options = df['Name'].tolist()
+    col_a, col_b = st.columns(2)
+    
+    with col_a:
+        p1 = st.selectbox("Select Player 1", star_options, index=0)
+        p1_data = df[df['Name'] == p1].iloc[0]
+        st.write(f"**{p1} Alpha Rank:** {p1_data['Alpha_Rank']:.2f}")
+        st.progress(min(p1_data['Alpha_Rank']/2, 1.0)) # Visual scale
         
-        fig.update_traces(textposition='top center', marker=dict(line=dict(width=1, color='DarkSlateGrey')))
-        fig.update_layout(plot_bgcolor='white', paper_bgcolor='white')
-        st.plotly_chart(fig, use_container_width=True)
+    with col_b:
+        p2 = st.selectbox("Select Player 2", star_options, index=1)
+        p2_data = df[df['Name'] == p2].iloc[0]
+        st.write(f"**{p2} Alpha Rank:** {p2_data['Alpha_Rank']:.2f}")
+        st.progress(min(p2_data['Alpha_Rank']/2, 1.0))
 
-    with col_right:
-        st.subheader("Market Leaderboard")
-        # Displaying a clean sorted list
-        leaderboard = df[['Name', 'Status', 'Divergence_Score']].sort_values(by='Divergence_Score', ascending=False)
-        st.dataframe(leaderboard, hide_index=True, use_container_width=True)
-
-    # 5. Full Data View
-    with st.expander("🔍 View Full Technical Dataset"):
-        st.dataframe(df, use_container_width=True)
-
-    # 6. Sidebar Analysis
-    st.sidebar.header("Gemini Alpha Notes")
-    st.sidebar.write(f"""
-        **Market Inefficiency Found:** {top_buy['Name']} is currently generating an OPS of {top_buy['OPS']:.3f} 
-        at a price point of ${top_buy['Price']:.0f}. 
-        
-        This divergence of **{top_buy['Divergence_Score']:.2f}** represents a premium buying window 
-        relative to established stars like Shohei Ohtani.
-    """)
-    st.sidebar.divider()
-    st.sidebar.button("Manual Refresh Data")
+    # 6. Technical Data Table
+    with st.expander("📊 View Detailed Market Logs"):
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
 else:
-    st.warning("🔄 Connecting to Google Sheets... Ensure your CSV link is correct.")
+    st.warning("⚠️ Connection Error. Ensure your Google Sheet is published and the URL is correct.")
